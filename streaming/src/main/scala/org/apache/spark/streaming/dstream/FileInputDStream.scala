@@ -118,7 +118,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    * Finds the files that were modified since the last time this method was called and makes
    * a union RDD out of them. Note that this maintains the list of files that were processed
    * in the latest modification time in the previous call to this method. This is because the
-   * modification time returned by the FileStatus API seems to return times only at the
+   * modification time ed by the FileStatus API seems to  times only at the
    * granularity of seconds. And new files may have the same modification time as the
    * latest modification time in the previous call to this method yet was not reported in
    * the previous call.
@@ -147,11 +147,16 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /**
+<<<<<<< HEAD
    * Find new files for the batch of `currentTime`. This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
+=======
+   * Find files which have modification timestamp <= current time and  a 3-tuple of
+   * (new files found, latest modification time among them, files with latest modification time)
+>>>>>>> change Nit
    */
 
   private def findNewFiles(currentTime: Long): Array[String] = {
@@ -387,6 +392,7 @@ object FileInputDStream {
    */
   private val MIN_REMEMBER_DURATION = Minutes(1)
 
+<<<<<<< HEAD
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
   /**
@@ -395,5 +401,72 @@ object FileInputDStream {
    */
   def calculateNumBatchesToRemember(batchDuration: Duration): Int = {
     math.ceil(MIN_REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
+=======
+    def accept(path: Path): Boolean = {
+      try {
+        if (fs.getFileStatus(path).isDirectory()){
+          false
+        }
+        if (!filter(path)) {  // Reject file if it does not satisfy filter
+          logDebug("Rejected by filter " + path)
+          false
+        }
+        // Reject file if it was found in the last interval
+        if (lastFoundFiles.contains(path.toString)) {
+          logDebug("Mod time equal to last mod time, but file considered already")
+          false
+        }
+        val modTime = getFileModTime(path)
+        logDebug(s"Mod time for $path is $modTime")
+        if (modTime < ignoreTime) {
+          // Reject file if it was created before the ignore time (or, before last interval)
+          logDebug(s"Mod time $modTime less than ignore time $ignoreTime")
+          false
+        } else if (modTime > maxModTime) {
+          // Reject file if it is too new that considering it may give errors
+          logDebug("Mod time more than ")
+          false
+        }
+        if (minNewFileModTime < 0 || modTime < minNewFileModTime) {
+          minNewFileModTime = modTime
+        }
+        if(path.getName().startsWith("_")){
+          logDebug(s"startsWith: ${path.getName()}")
+          false
+        }
+        logDebug("Accepted " + path)
+      } catch {
+        case fnfe: java.io.FileNotFoundException =>
+          logWarning("Error finding new files", fnfe)
+          reset()
+          false
+      }
+      true
+    }
+  }
+
+  class SubPathFilter extends PathFilter {
+
+    def accept(path: Path): Boolean = {
+      try {
+        if(fs.getFileStatus(path).isDirectory()){
+          val modTime = getFileModTime(path)
+          logDebug(s"Mod time for $path is $modTime")
+          if (modTime > ignoreTime) {
+            // Reject file if it was created before the ignore time (or, before last interval)
+            logDebug(s"Mod time $modTime more than ignore time $ignoreTime")
+            false
+          }
+          true
+        }
+      } catch {
+        case fnfe: java.io.IOException =>
+          logWarning("Error finding new files", fnfe)
+          reset()
+          false
+      }
+      true
+    }
+>>>>>>> change Nit
   }
 }
