@@ -436,7 +436,7 @@ object FileInputDStream {
 =======
     def accept(path: Path): Boolean = {
       try {
-        if (fs.getFileStatus(path).isDirectory()){
+        if (fs.getFileStatus(path).isDirectory()) {
           return false
         }
         if (!filter(path)) {  // Reject file if it does not satisfy filter
