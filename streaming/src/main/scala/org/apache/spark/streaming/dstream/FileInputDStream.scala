@@ -320,7 +320,15 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       tmp =getSubPathList(tmp,fs)
       pathList=tmp:::pathList
     }
-    pathList
+    pathList.filter(path=>{
+      val  modTime = fs.getFileStatus(path).getModificationTime
+      logDebug(s"Mod time for $path is $modTime")
+      if (modTime > ignoreTime) {
+        logDebug(s"Mod time $modTime more than ignore time $ignoreTime")
+        true
+      }
+      else false
+    })
   }
 
   def getSubPathList(path:List[Path],fs:FileSystem):List[Path]={
@@ -481,14 +489,8 @@ object FileInputDStream {
 
     def accept(path: Path): Boolean = {
       try {
-        val  pathStatus = fs.getFileStatus(path)
-        if(pathStatus.isDirectory()){
-          val modTime =pathStatus.getModificationTime
-          logDebug(s"Mod time for $path is $modTime")
-          if (modTime > ignoreTime) {
-            logDebug(s"Mod time $modTime more than ignore time $ignoreTime")
-            return true
-          }
+        if(fs.getFileStatus(path).isDirectory()) {
+          return true
         }
       } catch {
         case fnfe: java.io.IOException =>
