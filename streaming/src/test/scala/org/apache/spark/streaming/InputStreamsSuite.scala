@@ -165,7 +165,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val testDir = Utils.createTempDir()
     val subDir = Utils.createTempDir(testDir.toString)
     val ssc = new StreamingContext(conf, batchDuration)
-    val fileStream = ssc.textFileStream(testDir.toString,1)
+    val fileStream = ssc.textFileStream(testDir.toString, 1)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     def output = outputBuffer.flatMap(x => x)
     val outputStream = new TestOutputStream(fileStream, outputBuffer)
@@ -217,7 +217,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val subDir = Utils.createTempDir(testDir.toString)
     val triDir = Utils.createTempDir(subDir.toString)
     val ssc = new StreamingContext(conf, batchDuration)
-    val fileStream = ssc.textFileStream(testDir.toString,2)
+    val fileStream = ssc.textFileStream(testDir.toString, 2)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     def output = outputBuffer.flatMap(x => x)
     val outputStream = new TestOutputStream(fileStream, outputBuffer)
