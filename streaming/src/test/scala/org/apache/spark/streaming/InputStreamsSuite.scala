@@ -98,11 +98,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   test("file input stream - newFilesOnly = true") {
     testFileStream(newFilesOnly = true)
   }
 =======
   test("file input stream -depth = 0  ") {
+=======
+  test("file input stream - depth = 0") {
+>>>>>>> reformat code
     // Disable manual clock as FileInputDStream does not work with manual clock
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
 
@@ -153,7 +157,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testFileStream(newFilesOnly = false)
   }
 
-  test("file input stream -depth = 1") {
+  test("file input stream - depth = 1") {
     // Disable manual clock as FileInputDStream does not work with manual clock
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
 
@@ -204,7 +208,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
   }
 
-  test("file input stream  -depth = 2") {
+  test("file input stream  - depth = 2") {
     // Disable manual clock as FileInputDStream does not work with manual clock
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
 

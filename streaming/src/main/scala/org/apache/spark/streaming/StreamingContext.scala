@@ -333,11 +333,11 @@ class StreamingContext private[streaming] (
    * @tparam F Input format for reading HDFS file
    */
   def fileStream[
-    K: ClassTag,
-    V: ClassTag,
-    F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String,depth :Int =0): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory,depth)
+  K: ClassTag,
+  V: ClassTag,
+  F <: NewInputFormat[K, V] : ClassTag
+  ](directory: String, depth: Int = 0): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, depth)
   }
 
   /**
@@ -356,8 +356,8 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String,filter: Path => Boolean, newFilesOnly: Boolean, depth : Int =0): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory,depth, filter, newFilesOnly)
+  ](directory: String, filter: Path => Boolean, newFilesOnly: Boolean, depth: Int = 0): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, depth, filter, newFilesOnly)
   }
 
   /**
@@ -368,8 +368,8 @@ class StreamingContext private[streaming] (
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
-  def textFileStream(directory: String,depth: Int =0): DStream[String] = {
-    fileStream[LongWritable, Text, TextInputFormat](directory,depth).map(_._2.toString)
+  def textFileStream(directory: String, depth: Int = 0): DStream[String] = {
+    fileStream[LongWritable, Text, TextInputFormat](directory, depth).map(_._2.toString)
   }
 
   /**

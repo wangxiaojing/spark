@@ -70,11 +70,7 @@ private[streaming]
 class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
     @transient ssc_ : StreamingContext,
     directory: String,
-<<<<<<< HEAD
     depth: Int = 1,
-=======
-    depth: Int = 0,
->>>>>>> support depth
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true)
   extends InputDStream[(K, V)](ssc_) {
@@ -151,20 +147,11 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /**
-<<<<<<< HEAD
-<<<<<<< HEAD
    * Find new files for the batch of `currentTime`. This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
-=======
-   * Find files which have modification timestamp <= current time and  a 3-tuple of
-=======
-   * Find files which have modification timestamp <= current time and return a 3-tuple of
->>>>>>> support depth
-   * (new files found, latest modification time among them, files with latest modification time)
->>>>>>> change Nit
    */
 
   private def findNewFiles(currentTime: Long): Array[String] = {
@@ -261,7 +248,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     }
   }
 
-<<<<<<< HEAD
   /**
    * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
    * accepted, it has to pass the following criteria.
@@ -310,37 +296,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     }
     logDebug(s"$pathStr accepted with mod time $modTime")
     return true
-=======
-  def getPathList(path:Path, fs:FileSystem):List[Path]={
-    var pathList = List[Path]()
-    pathList = path:: pathList
-    var tmp =List[Path]()
-    tmp=path::tmp
-    for(i <- 0 until depth){
-      tmp =getSubPathList(tmp,fs)
-      pathList=tmp:::pathList
-    }
-    pathList.filter(path=>{
-      val  modTime = fs.getFileStatus(path).getModificationTime
-      logDebug(s"Mod time for $path is $modTime")
-      if (modTime > ignoreTime) {
-        logDebug(s"Mod time $modTime more than ignore time $ignoreTime")
-        true
-      }
-      else false
-    })
-  }
-
-  def getSubPathList(path:List[Path],fs:FileSystem):List[Path]={
-    val filter = new SubPathFilter()
-    var pathList = List[Path]()
-    path.map(subPath=>{
-     fs.listStatus(subPath,filter).map(x=>{
-        pathList = x.getPath()::pathList
-     })
-    })
-    pathList
->>>>>>> support depth
   }
 
   /** Generate one RDD from an array of files */
@@ -432,7 +387,6 @@ object FileInputDStream {
    */
   private val MIN_REMEMBER_DURATION = Minutes(1)
 
-<<<<<<< HEAD
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
   /**
@@ -441,65 +395,5 @@ object FileInputDStream {
    */
   def calculateNumBatchesToRemember(batchDuration: Duration): Int = {
     math.ceil(MIN_REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
-=======
-    def accept(path: Path): Boolean = {
-      try {
-        if (fs.getFileStatus(path).isDirectory()) {
-          return false
-        }
-        if (!filter(path)) {  // Reject file if it does not satisfy filter
-          logDebug("Rejected by filter " + path)
-          return false
-        }
-        // Reject file if it was found in the last interval
-        if (lastFoundFiles.contains(path.toString)) {
-          logDebug("Mod time equal to last mod time, but file considered already")
-          return false
-        }
-        val modTime = getFileModTime(path)
-        logDebug(s"Mod time for $path is $modTime")
-        if (modTime < ignoreTime) {
-          // Reject file if it was created before the ignore time (or, before last interval)
-          logDebug(s"Mod time $modTime less than ignore time $ignoreTime")
-          return false
-        } else if (modTime > maxModTime) {
-          // Reject file if it is too new that considering it may give errors
-          logDebug("Mod time more than ")
-          return false
-        }
-        if (minNewFileModTime < 0 || modTime < minNewFileModTime) {
-          minNewFileModTime = modTime
-        }
-        if(path.getName().startsWith("_")){
-          logDebug(s"startsWith: ${path.getName()}")
-          return false
-        }
-        logDebug("Accepted " + path)
-      } catch {
-        case fnfe: java.io.FileNotFoundException =>
-          logWarning("Error finding new files", fnfe)
-          reset()
-          false
-      }
-      true
-    }
-  }
-
-  class SubPathFilter extends PathFilter {
-
-    def accept(path: Path): Boolean = {
-      try {
-        if(fs.getFileStatus(path).isDirectory()) {
-          return true
-        }
-      } catch {
-        case fnfe: java.io.IOException =>
-          logWarning("Error finding new files", fnfe)
-          reset()
-          false
-      }
-      false
-    }
->>>>>>> change Nit
   }
 }
