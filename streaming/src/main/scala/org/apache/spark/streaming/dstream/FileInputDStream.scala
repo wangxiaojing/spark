@@ -311,14 +311,14 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private def findNewFiles(currentTime: Long): (Seq[String], Long) = {
     logDebug("Trying to get new files for time " + currentTime)
     lastNewFileFindingTime = System.currentTimeMillis
-    val fileFilter = new CustomPathFilter(currentTime)
+    val filter = new CustomPathFilter(currentTime)
 
     def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
       val modTime = status.getModificationTime
       status match {
         case _ if currentDepth < 0 => Nil
         case _ if (!status.isDirectory) => {
-          if (fileFilter.accept(status.getPath)) {
+          if (filter.accept(status.getPath)) {
             status :: Nil
           } else {
             Nil
@@ -341,8 +341,12 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
           "files in the monitored directory."
       )
     }
+<<<<<<< HEAD
     (newFiles, fileFilter.minNewFileModTime)
 >>>>>>> change performance
+=======
+    (newFiles, filter.minNewFileModTime)
+>>>>>>> change filter name
   }
 
   /** Generate one RDD from an array of files */
