@@ -317,14 +317,14 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       val modTime = status.getModificationTime
       status match {
         case _ if currentDepth < 0 => Nil
-        case _ if (!status.isDirectory) => {
+        case _ if !status.isDirectory => {
           if (filter.accept(status.getPath)) {
             status :: Nil
           } else {
             Nil
           }
         }
-        case _ if (status.isDirectory) => {
+        case _ if status.isDirectory => {
           fs.listStatus(status.getPath).toList.flatMap(dfs(_, currentDepth - 1))
         }
       }
