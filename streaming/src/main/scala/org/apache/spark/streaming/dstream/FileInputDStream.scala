@@ -21,13 +21,8 @@ import java.io.{FileNotFoundException, IOException, ObjectInputStream}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
-<<<<<<< HEAD
 
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
-=======
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
-import org.apache.hadoop.conf.Configuration
->>>>>>> change performance
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
@@ -80,13 +75,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     newFilesOnly: Boolean = true)
   extends InputDStream[(K, V)](ssc_) {
 
-<<<<<<< HEAD
   require(depth >= 1, "nested directories depth must >= 1")
   // Data to be saved as part of the streaming checkpoints
-=======
-  require(depth >= 1, "nested directories depth must >= 0")
-
->>>>>>> change performance
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
 
   // Initial ignore threshold based on which old, existing files in the directory (at the time of
@@ -163,7 +153,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
    */
-<<<<<<< HEAD
 
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
@@ -307,46 +296,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     }
     logDebug(s"$pathStr accepted with mod time $modTime")
     return true
-=======
-  private def findNewFiles(currentTime: Long): (Seq[String], Long) = {
-    logDebug("Trying to get new files for time " + currentTime)
-    lastNewFileFindingTime = System.currentTimeMillis
-    val filter = new CustomPathFilter(currentTime)
-
-    def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
-      val modTime = status.getModificationTime
-      status match {
-        case _ if currentDepth < 0 => Nil
-        case _ if !status.isDirectory => {
-          if (filter.accept(status.getPath)) {
-            status :: Nil
-          } else {
-            Nil
-          }
-        }
-        case _ if status.isDirectory => {
-          fs.listStatus(status.getPath).toList.flatMap(dfs(_, currentDepth - 1))
-        }
-      }
-    }
-
-    val newFiles = dfs(fs.getFileStatus(directoryPath), depth).map(_.getPath.toString)
-    val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
-    logInfo("Finding new files took " + timeTaken + " ms")
-    logDebug("# cached file times = " + fileModTimes.size)
-    if (timeTaken > slideDuration.milliseconds) {
-      logWarning(
-        "Time taken to find new files exceeds the batch size. " +
-          "Consider increasing the batch size or reduceing the number of " +
-          "files in the monitored directory."
-      )
-    }
-<<<<<<< HEAD
-    (newFiles, fileFilter.minNewFileModTime)
->>>>>>> change performance
-=======
-    (newFiles, filter.minNewFileModTime)
->>>>>>> change filter name
   }
 
   /** Generate one RDD from an array of files */
@@ -438,7 +387,6 @@ object FileInputDStream {
    */
   private val MIN_REMEMBER_DURATION = Minutes(1)
 
-<<<<<<< HEAD
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
   /**
@@ -447,45 +395,5 @@ object FileInputDStream {
    */
   def calculateNumBatchesToRemember(batchDuration: Duration): Int = {
     math.ceil(MIN_REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
-=======
-    def accept(path: Path): Boolean = {
-      try {
-        if (path.getName().startsWith("_")) {
-          logDebug(s"startsWith: ${path.getName()}")
-          return false
-        }
-        if (!filter(path)) {  // Reject file if it does not satisfy filter
-          logDebug("Rejected by filter " + path)
-          return false
-        }
-        // Reject file if it was found in the last interval
-        if (lastFoundFiles.contains(path.toString)) {
-          logDebug("Mod time equal to last mod time, but file considered already")
-          return false
-        }
-        val modTime = getFileModTime(path)
-        logDebug(s"Mod time for $path is $modTime")
-        if (modTime < ignoreTime) {
-          // Reject file if it was created before the ignore time (or, before last interval)
-          logDebug(s"Mod time $modTime less than ignore time $ignoreTime")
-          return false
-        } else if (modTime > maxModTime) {
-          // Reject file if it is too new that considering it may give errors
-          logDebug("Mod time more than ")
-          return false
-        }
-        if (minNewFileModTime < 0 || modTime < minNewFileModTime) {
-          minNewFileModTime = modTime
-        }
-        logDebug("Accepted " + path)
-      } catch {
-        case fnfe: java.io.FileNotFoundException =>
-          logWarning("Error finding new files", fnfe)
-          reset()
-          false
-      }
-      true
-    }
->>>>>>> change performance
   }
 }
