@@ -100,7 +100,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
   @transient private val lastFoundDirs = new mutable.HashSet[Path]()
 
-
   // Read-through cache of file mod times, used to speed up mod time lookups
   @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
 
@@ -153,7 +152,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
    */
-
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
       lastNewFileFindingTime = System.currentTimeMillis
@@ -170,7 +168,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       }
       val directoryDepth = directoryPath.depth()
 
-      //nested directories
+      // nested directories
       def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
         val modTime = status.getModificationTime
         status match {
