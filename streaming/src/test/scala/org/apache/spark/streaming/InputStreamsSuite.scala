@@ -267,8 +267,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
       ssc = new StreamingContext(newConf, batchDuration)
       val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
-        testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly, depth)
-        .map(_._2.toString)
+        testDir.toString, (x: Path) => true,
+        newFilesOnly = newFilesOnly, depth).map(_._2.toString)
       val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
       val outputStream = new TestOutputStream(fileStream, outputBuffer)
       outputStream.register()
