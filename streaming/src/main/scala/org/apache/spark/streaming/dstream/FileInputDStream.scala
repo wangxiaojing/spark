@@ -34,7 +34,7 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  * files and creates a stream out of them. The way it works as follows.
  *
  * At each batch interval, Use `depth` to control the searching depth of directories ,
- * if the `depth` is default 1, the file system is queried for files in the given directory,
+ * the `depth` is default 1, the file system is queried for files in the given directory,
  * if the `depth` is greater than 1 ,it is  queried for files in nested directory,
  * and detected new files are selected for that batch. In this case "new" means files that
  * became visible to readers during that time period. Some extra care is needed to deal
