@@ -65,6 +65,7 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *   selected as the mod time will be less than the ignore threshold when it becomes visible.
  * - Once a file is visible, the mod time cannot change. If it does due to appends, then the
  *   processing semantics are undefined.
+ *
  */
 private[streaming]
 class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
@@ -169,62 +170,47 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       val directoryDepth = fs.getFileStatus(directoryPath).getPath.depth()
 
       // nested directories
-      def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
-        status match {
-          case _ if currentDepth < 0 => Nil
-          case _ if !status.isDir => {
-            if (filter.accept(status.getPath)) {
-              status :: Nil
+      def dfs(status: FileStatus): List[FileStatus] = {
+        val path = status.getPath
+        val depthFilter = depth + directoryDepth - path.depth()
+        if (status.isDir) {
+          if (depthFilter - 1 >= 0) {
+            if (lastFoundDirs.contains(path)) {
+              if (status.getModificationTime > modTimeIgnoreThreshold) {
+                fs.listStatus(path).toList.flatMap(dfs(_))
+              } else Nil
             } else {
-              Nil
-            }
-          }
-          case _ if status.isDir => {
-            val path = status.getPath
-            val depthFilter =   depth + directoryDepth - path.depth()
-            if (lastFoundDirs.contains(path)
-              && (status.getModificationTime > modTimeIgnoreThreshold)) {
-              fs.listStatus(path).toList.flatMap(dfs(_, depthFilter - 1))
-            } else if (!lastFoundDirs.contains(path) && depthFilter >= 0   ) {
               lastFoundDirs += path
-              fs.listStatus(path).toList.flatMap(dfs(_, depthFilter - 1))
-            } else {
-              Nil
+              fs.listStatus(path).toList.flatMap(dfs(_))
             }
-          }
+          } else Nil
+        } else {
+          if (filter.accept(path)) status :: Nil else Nil
         }
       }
 
       var newFiles = List[String]()
       if (lastFoundDirs.isEmpty) {
-        newFiles = dfs(fs.getFileStatus(directoryPath), depth).map(_.getPath.toString)
+        newFiles = dfs(fs.getFileStatus(directoryPath)).map(_.getPath.toString)
       } else {
         lastFoundDirs.filter {
           path =>
+          // If the modification time of directory more than ignore time ,the directory is no change.
             try {
-              /* If the modidication time of directory more than ignore time ,the directory
-               * is no change.
-               */
               val status = fs.getFileStatus(path)
-              if (status != null && status.getModificationTime > modTimeIgnoreThreshold) {
-                true
-              } else {
-                false
-              }
+              if (status != null
+                && status.getModificationTime > modTimeIgnoreThreshold) true
+              else false
             }
             catch {
-              // If the directory do not found ,remove the drir from lastFoundDirs
-              case e: FileNotFoundException => {
+              // If the directory don't find ,remove the drir from lastFoundDirs
+              case e: FileNotFoundException =>
                 lastFoundDirs.remove(path)
                 false
-              }
             }
-          }
-      }.map {
-        path =>
-          newFiles = fs.listStatus(path).toList.flatMap(dfs(_,
-            depth + directoryDepth - path.depth())).map(_.getPath.toString)
-      }
+        }
+      }.map(path =>
+        newFiles = fs.listStatus(path).toList.flatMap(dfs(_).map(_.getPath.toString)))
 
       val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
