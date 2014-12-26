@@ -156,7 +156,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
-   *
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
