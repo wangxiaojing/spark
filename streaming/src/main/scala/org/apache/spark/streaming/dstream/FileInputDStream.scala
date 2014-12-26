@@ -35,7 +35,7 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *
  * At each batch interval, Use `depth` to find files in the directory recursively,
  * the file system is queried for files in the given directory and detected new
- * files are selected for that batch. if the `depth` is greater than 1,
+ * files are selected for that batch. If the `depth` is greater than 1,
  * it is queried for files in the depth of the recursion, In this case "new" means files that
  * became visible to readers during that time period. Some extra care is needed to deal
  * with the fact that files may become visible after they are created. For this purpose, this
