@@ -34,7 +34,8 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  * files and creates a stream out of them. The way it works as follows.
  *
  * At each batch interval, the file system is queried for files in the given directory and
- * detected new files are selected for that batch. In this case "new" means files that
+ * detected new files are selected for that batch. Use `depth` to control the searching
+ * depth of directories. In this case "new" means files that
  * became visible to readers during that time period. Some extra care is needed to deal
  * with the fact that files may become visible after they are created. For this purpose, this
  * class remembers the information about the files selected in past batches for
@@ -99,6 +100,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
+
+  // Set of directories that were found from the beginning to the present
   @transient private var lastFoundDirs = new mutable.HashSet[Path]()
 
   // Read-through cache of file mod times, used to speed up mod time lookups
@@ -147,11 +150,13 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /**
-   * Find new files for the batch of `currentTime`. This is done by first calculating the
+   * Find new files for the batch of `currentTime` in nested directories. 
+   * This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
    * is later in time).
+   *
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
@@ -169,7 +174,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       }
       val directoryDepth = fs.getFileStatus(directoryPath).getPath.depth()
 
-      // nested directories
+      // Nested directories to find new files.
       def dfs(status: FileStatus): List[FileStatus] = {
         val path = status.getPath
         val depthFilter = depth + directoryDepth - path.depth()
@@ -189,28 +194,25 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
         }
       }
 
-      var newFiles = List[String]()
-      if (lastFoundDirs.isEmpty) {
-        newFiles = dfs(fs.getFileStatus(directoryPath)).map(_.getPath.toString)
-      } else {
-        lastFoundDirs.filter {
-          path =>
-          // If the modification time of directory more than ignore time ,the directory is no change.
-            try {
-              val status = fs.getFileStatus(path)
-              if (status != null
-                && status.getModificationTime > modTimeIgnoreThreshold) true
-              else false
-            }
-            catch {
-              // If the directory don't find ,remove the drir from lastFoundDirs
-              case e: FileNotFoundException =>
-                lastFoundDirs.remove(path)
-                false
-            }
+      val path = if (lastFoundDirs.isEmpty) Seq(fs.getFileStatus(directoryPath))
+      else {
+        lastFoundDirs.filter { path =>
+          // If the mod time of directory is more than ignore time, no new files in this directory.
+          try {
+            val status = fs.getFileStatus(path)
+            if (status != null
+              && status.getModificationTime > modTimeIgnoreThreshold) true else false
+          }
+          catch {
+            // If the directory don't find ,remove the directory from `lastFoundDirs`
+            case e: FileNotFoundException =>
+              lastFoundDirs.remove(path)
+              false
+          }
         }
-      }.map(path =>
-        newFiles = fs.listStatus(path).toList.flatMap(dfs(_).map(_.getPath.toString)))
+      }.flatMap(fs.listStatus(_)).toSeq
+
+      val newFiles = path.flatMap(dfs(_)).map(_.getPath.toString).toArray
 
       val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
@@ -222,7 +224,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
             "files in the monitored directory."
         )
       }
-      newFiles.toArray
+      newFiles
     } catch {
       case e: Exception =>
         logWarning("Error finding new files", e)
