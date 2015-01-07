@@ -641,17 +641,17 @@ methods for creating DStreams from files and Akka actors as input sources.
 
     <div class="codetabs">
     <div data-lang="scala" markdown="1">
-        streamingContext.fileStream[KeyClass, ValueClass, InputFormatClass](dataDirectory)
+        streamingContext.fileStream[KeyClass, ValueClass, InputFormatClass](dataDirectory, depth)
     </div>
     <div data-lang="java" markdown="1">
-		streamingContext.fileStream<KeyClass, ValueClass, InputFormatClass>(dataDirectory);
+		streamingContext.fileStream<KeyClass, ValueClass, InputFormatClass>(dataDirectory, depth);
     </div>
     <div data-lang="python" markdown="1">
-		streamingContext.textFileStream(dataDirectory)
+		streamingContext.textFileStream(dataDirectory, depth)
     </div>
     </div>
 
-	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory (files written in nested directories not supported). Note that
+	Spark Streaming will monitor the directory `dataDirectory`, the `depth` is 1 by default and process any files created in that directory. If supported files written in nested directories, set the `depth` is more than 1. Note that
 
      + The files must have the same data format.
      + The files must be created in the `dataDirectory` by atomically *moving* or *renaming* them into
@@ -659,6 +659,7 @@ methods for creating DStreams from files and Akka actors as input sources.
      + Once moved, the files must not be changed. So if the files are being continuously appended, the new data will not be read.
 
 	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
+	If Spark Streaming monitor the directory in nested directories, there is an easier method `streamingContext.textFileStream(dataDirectory, depth)`. 
 
 	<span class="badge" style="background-color: grey">Python API</span>	As of Spark 1.2,
 	`fileStream` is not available in the Python API, only	`textFileStream` is	available.

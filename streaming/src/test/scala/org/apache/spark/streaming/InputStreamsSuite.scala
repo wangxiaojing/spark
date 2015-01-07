@@ -97,13 +97,30 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
 
-  test("file input stream - newFilesOnly = true") {
+  test("file input stream - newFilesOnly = true and depth = 1") {
     testFileStream(newFilesOnly = true)
   }
 
-  test("file input stream - newFilesOnly = false") {
+  test("file input stream - newFilesOnly = false and depth = 1") {
     testFileStream(newFilesOnly = false)
   }
+
+  test("file input stream - newFilesOnly = true and depth = 2") {
+    testFileStream(newFilesOnly = true, 2)
+  }
+
+  test("file input stream - newFilesOnly = false and depth = 2") {
+    testFileStream(newFilesOnly = false, 2)
+  }
+
+  test("file input stream - newFilesOnly = true and depth = 3") {
+    testFileStream(newFilesOnly = true, 3)
+  }
+
+  test("file input stream - newFilesOnly = false and depth = 3") {
+    testFileStream(newFilesOnly = false, 3)
+  }
+
 
   test("multi-thread receiver") {
     // set up the test receiver
@@ -233,11 +250,14 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  def testFileStream(newFilesOnly: Boolean) {
+  def testFileStream(newFilesOnly: Boolean, depth :Int = 1) {
     var ssc: StreamingContext = null
     val testDir: File = null
     try {
-      val testDir = Utils.createTempDir()
+      var testDir = Utils.createTempDir()
+      for (i <- 2 until depth) {
+        testDir = Utils.createTempDir(testDir.toString)
+      }
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, Charset.forName("UTF-8"))
 
@@ -247,7 +267,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
       ssc = new StreamingContext(newConf, batchDuration)
       val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
-        testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
+        testDir.toString, (x: Path) => true,
+        newFilesOnly = newFilesOnly, depth).map(_._2.toString)
       val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
       val outputStream = new TestOutputStream(fileStream, outputBuffer)
       outputStream.register()
