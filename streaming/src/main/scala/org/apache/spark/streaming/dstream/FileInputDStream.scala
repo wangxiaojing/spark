@@ -252,6 +252,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    */
   private def isNewFile(path: Path, currentTime: Long, modTimeIgnoreThreshold: Long): Boolean = {
     val pathStr = path.toString
+    // Reject file if it start with _
     if (path.getName().startsWith("_")) {
       logDebug(s"startsWith: ${path.getName()}")
       return false
@@ -323,7 +324,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     batchTimeToSelectedFiles = new mutable.HashMap[Time, Array[String]]()
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
-    lastFoundDirs =  new mutable.HashSet[Path]()
+    lastFoundDirs = new mutable.HashSet[Path]()
   }
 
   /**
