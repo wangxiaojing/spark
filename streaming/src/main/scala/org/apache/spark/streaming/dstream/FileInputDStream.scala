@@ -199,11 +199,11 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
           // If the mod time of directory is more than ignore time, no new files in this directory.
           try {
             val status = fs.getFileStatus(path)
-            if (status != null
-              && status.getModificationTime > modTimeIgnoreThreshold) true else false
+            if (status != null && status.getModificationTime > modTimeIgnoreThreshold) true
+            else false
           }
           catch {
-            // If the directory don't find ,remove the directory from `lastFoundDirs`
+            // If the directory don't find, remove the directory from `lastFoundDirs`
             case e: FileNotFoundException =>
               lastFoundDirs.remove(path)
               false
