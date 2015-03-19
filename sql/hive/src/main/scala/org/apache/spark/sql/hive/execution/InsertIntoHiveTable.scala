@@ -128,7 +128,7 @@ case class InsertIntoHiveTable(
   protected[sql] lazy val sideEffectResult: Seq[Row] = {
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
     // instances within the closure, since Serializer is not serializable while TableDesc is.
-    val tableDesc = table.tableDesc
+    val tableDesc = table.tableDescVirtual
     val tableLocation = table.hiveQlTable.getDataLocation
     val tmpLocation = HiveShim.getExternalTmpPath(hiveContext, tableLocation)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)

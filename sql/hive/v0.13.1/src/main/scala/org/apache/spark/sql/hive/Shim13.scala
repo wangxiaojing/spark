@@ -169,6 +169,25 @@ private[hive] object HiveShim {
     new TableDesc(inputFormatClass, outputFormatClass, properties)
   }
 
+  def getTableDescVirtual(
+    serdeClass: Class[_ <: Deserializer],
+    inputFormatClass: Class[_ <: InputFormat[_, _]],
+    outputFormatClass: Class[_],
+    properties: Properties) = {
+   val colums = properties.getProperty("columns",null) + ",BLOCK__OFFSET__INSIDE__FILE,INPUT__FILE__NAME"
+    properties.setProperty("columns", colums )
+
+    val columsTypes = properties.getProperty("columns.types",null) + ":int:string"
+    properties.setProperty("columns.types", columsTypes )
+
+    val serializationDdl =
+      properties.getProperty("serialization.ddl",null).getBytes +
+        "int BLOCK__OFFSET__INSIDE__FILE,string INPUT__FILE__NAME"
+
+    properties.setProperty("serialization.ddl", serializationDdl )
+
+    new TableDesc(inputFormatClass, outputFormatClass, properties)
+  }
 
   def getStringWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
