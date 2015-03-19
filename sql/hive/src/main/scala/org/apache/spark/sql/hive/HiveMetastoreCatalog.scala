@@ -429,7 +429,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
             if !relation.hiveQlTable.isPartitioned &&
               hive.convertMetastoreParquet &&
               hive.conf.parquetUseDataSourceApi &&
-              relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
+              relation.tableDescVirtual.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)
           (relation, parquetRelation, attributedRewrites)
@@ -438,7 +438,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
             if hive.convertMetastoreParquet &&
               hive.conf.parquetUseDataSourceApi &&
-              relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
+              relation.tableDescVirtual.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           val attributedRewrites = relation.output.zip(parquetRelation.output)
           (relation, parquetRelation, attributedRewrites)
@@ -692,7 +692,7 @@ private[hive] case class MetastoreRelation
     }
   }
 
-  val tableDesc = HiveShim.getTableDesc(
+  val tableDesc = HiveShim.getTableDescVirtual(
     Class.forName(
       hiveQlTable.getSerializationLib,
       true,
@@ -705,6 +705,21 @@ private[hive] case class MetastoreRelation
     hiveQlTable.getOutputFormatClass,
     hiveQlTable.getMetadata
   )
+
+  val tableDescVirtual = HiveShim.getTableDesc(
+    Class.forName(
+      hiveQlTable.getSerializationLib,
+      true,
+      Utils.getContextOrSparkClassLoader).asInstanceOf[Class[Deserializer]],
+    hiveQlTable.getInputFormatClass,
+    // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
+    // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
+    // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
+    // HiveSequenceFileOutputFormat.
+    hiveQlTable.getOutputFormatClass,
+    hiveQlTable.getMetadata
+  )
+
 
   implicit class SchemaAttribute(f: FieldSchema) {
     def toAttribute = AttributeReference(
@@ -721,7 +736,14 @@ private[hive] case class MetastoreRelation
   /** Non-partitionKey attributes */
   val attributes = hiveQlTable.getCols.map(_.toAttribute)
 
-  val output = attributes ++ partitionKeys
+  var virtualAttributes = scala.collection.immutable.List[FieldSchema]()
+  val inputFileNmae = new FieldSchema("INPUT__FILE__NAME", "string","")
+  val offset = new FieldSchema("BLOCK__OFFSET__INSIDE__FILE", "int","")
+  virtualAttributes = offset :: inputFileNmae :: virtualAttributes
+  val c = virtualAttributes.map(_.toAttribute)
+  val output = attributes  ++ c ++ partitionKeys
+  val attributes1 = attributes ++ c
+  //val output = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
   val attributeMap = AttributeMap(output.map(o => (o,o)))

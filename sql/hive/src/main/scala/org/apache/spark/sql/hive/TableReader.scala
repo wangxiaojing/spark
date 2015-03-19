@@ -35,7 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.DateUtils
-
+import org.apache.spark.sql.hive.VirtualHadoopRDD
 /**
  * A trait for subclasses that handle table scans.
  */
@@ -107,7 +107,13 @@ class HadoopTableReader(
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
       .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
+
+    val hadoopRDD =if (attributes.seq.toString.contains("BLOCK__OFFSET__INSIDE__FILE") ||
+                   attributes.seq.toString.contains("INPUT__FILE__NAME")){
+        createHadoopRddVirtual(tableDesc, inputPathStr, ifc)
+    } else{
+      createHadoopRdd(tableDesc, inputPathStr, ifc)
+    }
 
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
@@ -240,6 +246,29 @@ class HadoopTableReader(
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
   }
+
+  private def createHadoopRddVirtual(
+     tableDesc: TableDesc,
+     path: String,
+     inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
+
+    val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
+
+    val rdd = new VirtualHadoopRDD(
+      sc.sparkContext,
+      _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
+      Some(initializeJobConfFunc),
+      inputFormatClass,
+      classOf[Writable],
+      classOf[Writable],
+      _minSplitsPerRDD,
+      tableDesc)
+
+    // Only take the value (skip the key) because Hive works only with values.
+    rdd.map(_._2)
+  }
+
+
 }
 
 private[hive] object HadoopTableReader extends HiveInspectors {
@@ -273,9 +302,11 @@ private[hive] object HadoopTableReader extends HiveInspectors {
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
       mutableRow: MutableRow): Iterator[Row] = {
 
+    val  inputfile = "INPUT__FILE__NAME|BLOCK__OFFSET__INSIDE__FILE|input__file__name".r
     val soi = deserializer.getObjectInspector().asInstanceOf[StructObjectInspector]
-    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
-      soi.getStructFieldRef(attr.name) -> ordinal
+    val (fieldRefs, fieldOrdinals) =
+      nonPartitionKeyAttrs.map { case (attr, ordinal) if (!attr.name.contains("input__file__name")) =>
+        soi.getStructFieldRef(attr.name) -> ordinal
     }.unzip
 
     // Builds specific unwrappers ahead of time according to object inspector types to avoid pattern
