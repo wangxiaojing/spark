@@ -19,21 +19,22 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
-import org.apache.spark.mllib.tree.model.Node
+import org.apache.spark.mllib.tree.model.{Node, RandomForestModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
+
 
 /**
  * Test suite for [[RandomForest]].
  */
-class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
+class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   def binaryClassificationTestWithContinuousFeatures(strategy: Strategy) {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
@@ -57,7 +58,7 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+      numClasses = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
     binaryClassificationTestWithContinuousFeatures(strategy)
   }
 
@@ -65,7 +66,7 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+      numClasses = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
       useNodeIdCache = true)
     binaryClassificationTestWithContinuousFeatures(strategy)
   }
@@ -93,7 +94,7 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Regression, impurity = Variance,
-      maxDepth = 2, maxBins = 10, numClassesForClassification = 2,
+      maxDepth = 2, maxBins = 10, numClasses = 2,
       categoricalFeaturesInfo = categoricalFeaturesInfo)
     regressionTestWithContinuousFeatures(strategy)
   }
@@ -102,7 +103,7 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Regression, impurity = Variance,
-      maxDepth = 2, maxBins = 10, numClassesForClassification = 2,
+      maxDepth = 2, maxBins = 10, numClasses = 2,
       categoricalFeaturesInfo = categoricalFeaturesInfo, useNodeIdCache = true)
     regressionTestWithContinuousFeatures(strategy)
   }
@@ -169,14 +170,14 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
   test("Binary classification with continuous features: subsampling features") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
+      numClasses = 2, categoricalFeaturesInfo = categoricalFeaturesInfo)
     binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy)
   }
 
   test("Binary classification with continuous features and node Id cache: subsampling features") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+      numClasses = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
       useNodeIdCache = true)
     binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy)
   }
@@ -191,11 +192,46 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
     val input = sc.parallelize(arr)
 
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClassesForClassification = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
+      numClasses = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
     val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
       featureSubsetStrategy = "sqrt", seed = 12345)
-    EnsembleTestHelper.validateClassifier(model, arr, 1.0)
   }
+
+  test("subsampling rate in RandomForest"){
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(5, 20)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
+      useNodeIdCache = true)
+
+    val rf1 = RandomForest.trainClassifier(rdd, strategy, numTrees = 3,
+      featureSubsetStrategy = "auto", seed = 123)
+    strategy.subsamplingRate = 0.5
+    val rf2 = RandomForest.trainClassifier(rdd, strategy, numTrees = 3,
+      featureSubsetStrategy = "auto", seed = 123)
+    assert(rf1.toDebugString != rf2.toDebugString)
+  }
+
+  test("model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    Array(Classification, Regression).foreach { algo =>
+      val trees = Range(0, 3).map(_ => DecisionTreeSuite.createModel(algo)).toArray
+      val model = new RandomForestModel(algo, trees)
+
+      // Save model, load it back, and compare.
+      try {
+        model.save(sc, path)
+        val sameModel = RandomForestModel.load(sc, path)
+        assert(model.algo == sameModel.algo)
+        model.trees.zip(sameModel.trees).foreach { case (treeA, treeB) =>
+          DecisionTreeSuite.checkEqual(treeA, treeB)
+        }
+      } finally {
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+  }
+
 }
-
-

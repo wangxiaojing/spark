@@ -19,6 +19,7 @@
 # This file contains helper methods used in creating a release.
 
 import re
+import sys
 from subprocess import Popen, PIPE
 
 try:
@@ -26,7 +27,7 @@ try:
     from jira.exceptions import JIRAError
 except ImportError:
     print "This tool requires the jira-python library"
-    print "Install using 'sudo pip install jira-python'"
+    print "Install using 'sudo pip install jira'"
     sys.exit(-1)
 
 try:
@@ -44,20 +45,88 @@ except ImportError:
     print "Install using 'sudo pip install unidecode'"
     sys.exit(-1)
 
+# Contributors list file name
+contributors_file_name = "contributors.txt"
+
+# Prompt the user to answer yes or no until they do so
+def yesOrNoPrompt(msg):
+    response = raw_input("%s [y/n]: " % msg)
+    while response != "y" and response != "n":
+        return yesOrNoPrompt(msg)
+    return response == "y"
+
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd): return Popen(cmd, stdout=PIPE).communicate()[0]
-def get_author(commit_hash):
-    return run_cmd(["git", "show", "--quiet", "--pretty=format:%an", commit_hash])
+def run_cmd_error(cmd): return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1]
 def get_date(commit_hash):
     return run_cmd(["git", "show", "--quiet", "--pretty=format:%cd", commit_hash])
-def get_one_line(commit_hash):
-    return run_cmd(["git", "show", "--quiet", "--pretty=format:\"%h %cd %s\"", commit_hash])
-def get_one_line_commits(start_hash, end_hash):
-    return run_cmd(["git", "log", "--oneline", "%s..%s" % (start_hash, end_hash)])
-def num_commits_in_range(start_hash, end_hash):
-    output = run_cmd(["git", "log", "--oneline", "%s..%s" % (start_hash, end_hash)])
-    lines = [line for line in output.split("\n") if line] # filter out empty lines
-    return len(lines)
+def tag_exists(tag):
+    stderr = run_cmd_error(["git", "show", tag])
+    return "error" not in stderr
+
+# A type-safe representation of a commit
+class Commit:
+    def __init__(self, _hash, author, title, pr_number = None):
+        self._hash = _hash
+        self.author = author
+        self.title = title
+        self.pr_number = pr_number
+    def get_hash(self): return self._hash
+    def get_author(self): return self.author
+    def get_title(self): return self.title
+    def get_pr_number(self): return self.pr_number
+    def __str__(self):
+        closes_pr = "(Closes #%s)" % self.pr_number if self.pr_number else ""
+        return "%s %s %s %s" % (self._hash, self.author, self.title, closes_pr)
+
+# Return all commits that belong to the specified tag.
+#
+# Under the hood, this runs a `git log` on that tag and parses the fields
+# from the command output to construct a list of Commit objects. Note that
+# because certain fields reside in the commit description and cannot be parsed
+# through the Github API itself, we need to do some intelligent regex parsing
+# to extract those fields.
+#
+# This is written using Git 1.8.5.
+def get_commits(tag):
+    commit_start_marker = "|=== COMMIT START MARKER ===|"
+    commit_end_marker = "|=== COMMIT END MARKER ===|"
+    field_end_marker = "|=== COMMIT FIELD END MARKER ===|"
+    log_format =\
+        commit_start_marker + "%h" +\
+        field_end_marker + "%an" +\
+        field_end_marker + "%s" +\
+        commit_end_marker + "%b"
+    output = run_cmd(["git", "log", "--quiet", "--pretty=format:" + log_format, tag])
+    commits = []
+    raw_commits = [c for c in output.split(commit_start_marker) if c]
+    for commit in raw_commits:
+        if commit.count(commit_end_marker) != 1:
+            print "Commit end marker not found in commit: "
+            for line in commit.split("\n"): print line
+            sys.exit(1)
+        # Separate commit digest from the body
+        # From the digest we extract the hash, author and the title
+        # From the body, we extract the PR number and the github username
+        [commit_digest, commit_body] = commit.split(commit_end_marker)
+        if commit_digest.count(field_end_marker) != 2:
+            sys.exit("Unexpected format in commit: %s" % commit_digest)
+        [_hash, author, title] = commit_digest.split(field_end_marker)
+        # The PR number and github username is in the commit message
+        # itself and cannot be accessed through any Github API
+        pr_number = None
+        match = re.search("Closes #([0-9]+) from ([^/\\s]+)/", commit_body)
+        if match:
+            [pr_number, github_username] = match.groups()
+            # If the author name is not valid, use the github
+            # username so we can translate it properly later
+            if not is_valid_author(author):
+                author = github_username
+        # Guard against special characters
+        author = unidecode.unidecode(unicode(author, "UTF-8")).strip()
+        commit = Commit(_hash, author, title, pr_number)
+        commits.append(commit)
+    return commits
 
 # Maintain a mapping for translating issue types to contributions in the release notes
 # This serves an additional function of warning the user against unknown issue types
@@ -67,9 +136,13 @@ def num_commits_in_range(start_hash, end_hash):
 known_issue_types = {
     "bug": "bug fixes",
     "build": "build fixes",
+    "dependency upgrade": "build fixes",
     "improvement": "improvements",
     "new feature": "new features",
-    "documentation": "documentation"
+    "documentation": "documentation",
+    "test": "test",
+    "task": "improvement",
+    "sub-task": "improvement"
 }
 
 # Maintain a mapping for translating component names when creating the release notes
@@ -172,8 +245,7 @@ def get_jira_name(author, jira_client):
 # Return whether the given name is in the form <First Name><space><Last Name>
 def is_valid_author(author):
     if not author: return False
-    author_words = len(author.split(" "))
-    return author_words == 2 or author_words == 3
+    return " " in author and not re.findall("[0-9]", author)
 
 # Capitalize the first letter of each word in the given author name
 def capitalize_author(author):
@@ -181,37 +253,4 @@ def capitalize_author(author):
     words = author.split(" ")
     words = [w[0].capitalize() + w[1:] for w in words if w]
     return " ".join(words)
-
-# Maintain a mapping of translated author names as a cache
-translated_authors = {}
-
-# Format the given author in a format appropriate for the contributors list.
-# If the author is not an actual name, search github and JIRA for potential
-# replacements and log all candidates as a warning.
-def translate_author(github_author, github_client, jira_client, warnings):
-    if is_valid_author(github_author):
-        return capitalize_author(github_author)
-    # If the translated author is already cached, just return it
-    if github_author in translated_authors:
-        return translated_authors[github_author]
-    # Otherwise, author name is not found, so we need to search for an alternative name
-    candidates = set()
-    github_name = get_github_name(github_author, github_client)
-    jira_name = get_jira_name(github_author, jira_client)
-    if is_valid_author(github_name): github_name = capitalize_author(github_name)
-    if is_valid_author(jira_name): jira_name = capitalize_author(jira_name)
-    if github_name: candidates.add(github_name)
-    if jira_name: candidates.add(jira_name)
-    # Only use the github name as a replacement automatically
-    # The JIRA name may not make sense because it can belong to someone else
-    if is_valid_author(github_name):
-        candidates_message = " (another candidate is %s)" % jira_name if jira_name else ""
-        warnings.append("Replacing github user %s with %s%s" % (github_author, github_name, candidates_message))
-        translated_authors[github_name] = github_name
-        return translated_authors[github_name]
-    # No direct replacement, so return the original author and list any candidates found
-    candidates_message = " (candidates: %s)" % nice_join(candidates) if candidates else ""
-    warnings.append("Unable to find a replacement for github user %s%s" % (github_author, candidates_message))
-    translated_authors[github_author] = github_author
-    return translated_authors[github_author]
 

@@ -34,6 +34,9 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, SquaredError, Loss}
  *                      weak hypotheses used in the final model.
  * @param learningRate Learning rate for shrinking the contribution of each estimator. The
  *                     learning rate should be between in the interval (0, 1]
+ * @param validationTol Useful when runWithValidation is used. If the error rate on the
+ *                      validation input between two iterations is less than the validationTol
+ *                      then stop. Ignored when [[run]] is used.
  */
 @Experimental
 case class BoostingStrategy(
@@ -42,7 +45,8 @@ case class BoostingStrategy(
     @BeanProperty var loss: Loss,
     // Optional boosting parameters
     @BeanProperty var numIterations: Int = 100,
-    @BeanProperty var learningRate: Double = 0.1) extends Serializable {
+    @BeanProperty var learningRate: Double = 0.1,
+    @BeanProperty var validationTol: Double = 1e-5) extends Serializable {
 
   /**
    * Check validity of parameters.
@@ -51,7 +55,7 @@ case class BoostingStrategy(
   private[tree] def assertValid(): Unit = {
     treeStrategy.algo match {
       case Classification =>
-        require(treeStrategy.numClassesForClassification == 2,
+        require(treeStrategy.numClasses == 2,
           "Only binary classification is supported for boosting.")
       case Regression =>
         // nothing
@@ -70,22 +74,31 @@ object BoostingStrategy {
 
   /**
    * Returns default configuration for the boosting algorithm
+   * @param algo Learning goal.  Supported: "Classification" or "Regression"
+   * @return Configuration for boosting algorithm
+   */
+  def defaultParams(algo: String): BoostingStrategy = {
+    defaultParams(Algo.fromString(algo))
+  }
+
+  /**
+   * Returns default configuration for the boosting algorithm
    * @param algo Learning goal.  Supported:
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
    *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
    * @return Configuration for boosting algorithm
    */
-  def defaultParams(algo: String): BoostingStrategy = {
-    val treeStrategy = Strategy.defaultStrategy(algo)
+  def defaultParams(algo: Algo): BoostingStrategy = {
+    val treeStrategy = Strategy.defaultStategy(algo)
     treeStrategy.maxDepth = 3
     algo match {
-      case "Classification" =>
-        treeStrategy.numClassesForClassification = 2
+      case Algo.Classification =>
+        treeStrategy.numClasses = 2
         new BoostingStrategy(treeStrategy, LogLoss)
-      case "Regression" =>
+      case Algo.Regression =>
         new BoostingStrategy(treeStrategy, SquaredError)
       case _ =>
-        throw new IllegalArgumentException(s"$algo is not supported by the boosting.")
+        throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }
   }
 }
